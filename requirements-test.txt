@@ -1,0 +1,33 @@
+# Testing Dependencies
+# Week 3-4 Implementation
+
+# Core testing framework
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-timeout==2.2.0
+
+# HTTP testing
+httpx==0.25.2
+respx==0.20.2
+
+# Mocking and fixtures
+faker==20.1.0
+factory-boy==3.3.0
+
+# Code quality
+pytest-flake8==1.1.1
+pytest-mypy==0.10.3
+pytest-black==0.3.12
+
+# Performance testing
+pytest-benchmark==4.0.0
+
+# Test reporting
+pytest-html==4.1.1
+pytest-json-report==1.5.0
+
+# Coverage reporting
+coverage[toml]==7.3.2
+
