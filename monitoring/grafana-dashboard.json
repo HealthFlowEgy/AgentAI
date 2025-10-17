@@ -1,0 +1,283 @@
+{
+  "dashboard": {
+    "title": "RCM System Overview",
+    "tags": ["healthcare", "rcm", "claims"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "type": "stat",
+        "title": "Active Workflows",
+        "targets": [{
+          "expr": "sum(rcm_active_workflows)",
+          "refId": "A"
+        }],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 10, "color": "yellow"},
+                {"value": 50, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "type": "stat",
+        "title": "Claims Submitted (24h)",
+        "targets": [{
+          "expr": "sum(increase(rcm_claims_submitted_total[24h]))",
+          "refId": "A"
+        }],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "type": "stat",
+        "title": "Clean Claim Rate",
+        "targets": [{
+          "expr": "avg(rcm_clean_claim_rate_percent)",
+          "refId": "A"
+        }],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "red"},
+                {"value": 85, "color": "yellow"},
+                {"value": 95, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "type": "stat",
+        "title": "Avg Days in A/R",
+        "targets": [{
+          "expr": "avg(rcm_days_in_ar)",
+          "refId": "A"
+        }],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "days",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 30, "color": "yellow"},
+                {"value": 45, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "type": "graph",
+        "title": "Workflow Completion Rate",
+        "targets": [
+          {
+            "expr": "rate(rcm_workflows_completed_total[5m])",
+            "legendFormat": "Completed",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(rcm_workflows_failed_total[5m])",
+            "legendFormat": "Failed",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Workflows/sec"},
+          {"format": "short"}
+        ],
+        "legend": {"show": true, "values": true, "current": true}
+      },
+      {
+        "id": 6,
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "type": "graph",
+        "title": "Workflow Duration (p95)",
+        "targets": [{
+          "expr": "histogram_quantile(0.95, sum(rate(rcm_workflow_duration_seconds_bucket[5m])) by (le, workflow_type))",
+          "legendFormat": "{{workflow_type}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "gridPos": {"x": 0, "y": 12, "w": 8, "h": 8},
+        "type": "piechart",
+        "title": "Claims by Payer",
+        "targets": [{
+          "expr": "sum(rcm_claims_submitted_total) by (payer)",
+          "refId": "A"
+        }],
+        "options": {
+          "legend": {"display": true, "placement": "right"},
+          "displayLabels": ["percent"]
+        }
+      },
+      {
+        "id": 8,
+        "gridPos": {"x": 8, "y": 12, "w": 8, "h": 8},
+        "type": "graph",
+        "title": "HCX API Response Times",
+        "targets": [{
+          "expr": "histogram_quantile(0.95, sum(rate(rcm_hcx_api_duration_seconds_bucket[5m])) by (le, endpoint))",
+          "legendFormat": "{{endpoint}} (p95)",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "s", "label": "Response Time"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "gridPos": {"x": 16, "y": 12, "w": 8, "h": 8},
+        "type": "graph",
+        "title": "Agent Execution Times",
+        "targets": [{
+          "expr": "histogram_quantile(0.95, sum(rate(rcm_agent_execution_seconds_bucket[5m])) by (le, agent_name))",
+          "legendFormat": "{{agent_name}}",
+          "refId": "A"
+        }],
+        "yaxes": [
+          {"format": "s"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 10,
+        "gridPos": {"x": 0, "y": 20, "w": 12, "h": 6},
+        "type": "table",
+        "title": "Workflow Step Performance",
+        "targets": [{
+          "expr": "avg(rcm_workflow_step_duration_seconds) by (step_name, agent_name)",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true},
+              "renameByName": {
+                "step_name": "Step",
+                "agent_name": "Agent",
+                "Value": "Avg Duration (s)"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "gridPos": {"x": 12, "y": 20, "w": 12, "h": 6},
+        "type": "graph",
+        "title": "Error Rate by Component",
+        "targets": [
+          {
+            "expr": "rate(rcm_hcx_api_errors_total[5m])",
+            "legendFormat": "HCX - {{error_type}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(rcm_agent_errors_total[5m])",
+            "legendFormat": "Agent - {{agent_name}}",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(rcm_db_errors_total[5m])",
+            "legendFormat": "DB - {{operation}}",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Errors/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 12,
+        "gridPos": {"x": 0, "y": 26, "w": 8, "h": 6},
+        "type": "stat",
+        "title": "Total Revenue Captured (30d)",
+        "targets": [{
+          "expr": "sum(increase(rcm_revenue_captured_egp[30d]))",
+          "refId": "A"
+        }],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyEGP",
+            "decimals": 0,
+            "color": {"mode": "palette-classic"}
+          }
+        }
+      },
+      {
+        "id": 13,
+        "gridPos": {"x": 8, "y": 26, "w": 8, "h": 6},
+        "type": "gauge",
+        "title": "Denial Rate",
+        "targets": [{
+          "expr": "avg(rcm_denial_rate_percent)",
+          "refId": "A"
+        }],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 10, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 14,
+        "gridPos": {"x": 16, "y": 26, "w": 8, "h": 6},
+        "type": "stat",
+        "title": "LLM API Calls (24h)",
+        "targets": [{
+          "expr": "sum(increase(rcm_agent_llm_calls_total[24h]))",
+          "ref

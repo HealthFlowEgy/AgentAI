@@ -1,0 +1,413 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: healthcare-prod
+  labels:
+    name: healthcare-prod
+    environment: production
+
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rcm-config
+  namespace: healthcare-prod
+data:
+  ENVIRONMENT: "production"
+  APP_NAME: "Healthcare RCM System"
+  APP_VERSION: "1.0.0"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  
+  # Database
+  DB_HOST: "postgres-service.healthcare-prod.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "healthcare_rcm_prod"
+  DB_USER: "rcm_user"
+  DB_POOL_SIZE: "50"
+  DB_MAX_OVERFLOW: "20"
+  DB_POOL_TIMEOUT: "30"
+  DB_POOL_RECYCLE: "3600"
+  
+  # Redis
+  REDIS_HOST: "redis-service.healthcare-prod.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_SSL: "true"
+  
+  # HCX Platform
+  HCX_API_URL: "https://api.hcxprotocol.io"
+  HCX_GATEWAY_URL: "https://gateway.hcxprotocol.io"
+  HCX_REQUEST_TIMEOUT: "30"
+  HCX_CONNECT_TIMEOUT: "10"
+  
+  # Retry Configuration
+  MAX_RETRIES: "3"
+  RETRY_BACKOFF_FACTOR: "2.0"
+  RETRY_MAX_WAIT: "10"
+  
+  # Rate Limiting
+  RATE_LIMIT_PER_MINUTE: "120"
+  RATE_LIMIT_BURST: "20"
+  
+  # Feature Flags
+  ENABLE_ELIGIBILITY_CHECK: "true"
+  ENABLE_PREAUTH: "true"
+  ENABLE_CLAIM_SUBMISSION: "true"
+  ENABLE_ANALYTICS: "true"
+
+---
+# Secret for sensitive data (create manually or via sealed-secrets)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rcm-secrets
+  namespace: healthcare-prod
+type: Opaque
+stringData:
+  JWT_SECRET: "REPLACE_WITH_ACTUAL_SECRET"
+  ENCRYPTION_KEY: "REPLACE_WITH_ACTUAL_KEY"
+  DB_PASSWORD: "REPLACE_WITH_DB_PASSWORD"
+  REDIS_PASSWORD: "REPLACE_WITH_REDIS_PASSWORD"
+  HCX_USERNAME: "REPLACE_WITH_HCX_USER"
+  HCX_PASSWORD: "REPLACE_WITH_HCX_PASSWORD"
+  OPENAI_API_KEY: "REPLACE_WITH_OPENAI_KEY"
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rcm-api
+  namespace: healthcare-prod
+  labels:
+    app: rcm-api
+    version: blue
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: rcm-api
+  template:
+    metadata:
+      labels:
+        app: rcm-api
+        version: blue
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Security Context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      # Init Container for database migrations
+      initContainers:
+      - name: db-migrations
+        image: ghcr.io/your-org/rcm-system:latest
+        command: ['alembic', 'upgrade', 'head']
+        envFrom:
+        - configMapRef:
+            name: rcm-config
+        - secretRef:
+            name: rcm-secrets
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+      
+      containers:
+      - name: rcm-api
+        image: ghcr.io/your-org/rcm-system:latest
+        imagePullPolicy: Always
+        
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        
+        # Environment Variables
+        envFrom:
+        - configMapRef:
+            name: rcm-config
+        - secretRef:
+            name: rcm-secrets
+        
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+        - name: REDIS_URL
+          value: "rediss://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+        
+        # Resource Limits
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        
+        # Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Startup Probe (for slow-starting apps)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
+        
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        
+        # Volume Mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /var/log/rcm
+      
+      # Volumes
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      
+      # Pod Disruption Budget
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - rcm-api
+              topologyKey: kubernetes.io/hostname
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: rcm-api-service
+  namespace: healthcare-prod
+  labels:
+    app: rcm-api
+spec:
+  type: ClusterIP
+  selector:
+    app: rcm-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rcm-api-hpa
+  namespace: healthcare-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rcm-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rcm-api-pdb
+  namespace: healthcare-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: rcm-api
+
+---
+# Ingress (NGINX)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rcm-api-ingress
+  namespace: healthcare-prod
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  tls:
+  - hosts:
+    - rcm.example.com
+    secretName: rcm-tls-cert
+  rules:
+  - host: rcm.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rcm-api-service
+            port:
+              number: 80
+
+---
+# Network Policy (optional - for additional security)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rcm-api-netpol
+  namespace: healthcare-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: rcm-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow PostgreSQL
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow HCX API (external)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# ServiceMonitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rcm-api-metrics
+  namespace: healthcare-prod
+  labels:
+    app: rcm-api
+spec:
+  selector:
+    matchLabels:
+      app: rcm-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
