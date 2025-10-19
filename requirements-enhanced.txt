@@ -1,0 +1,90 @@
+# ============================================================================
+# HEALTHFLOW RCM SYSTEM - ENHANCED REQUIREMENTS
+# Updated: October 19, 2025
+# Includes: Base system + Chat interface + OCR + Speech
+# ============================================================================
+
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# AI & Agents
+praisonai==0.0.27
+openai==1.10.0
+
+# Database
+sqlalchemy==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Caching
+redis==5.0.1
+hiredis==2.3.2
+
+# HTTP & Async
+httpx==0.26.0
+aiohttp==3.9.1
+aiofiles==23.2.1
+tenacity==8.2.3
+
+# FHIR & Healthcare
+fhir.resources==7.1.0
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+cryptography==42.0.0
+python-dotenv==1.0.0
+
+# Monitoring & Logging
+prometheus-client==0.19.0
+structlog==24.1.0
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+respx==0.20.2
+
+# Code Quality
+black==24.1.1
+flake8==7.0.0
+mypy==1.8.0
+isort==5.13.2
+bandit==1.7.6
+safety==3.0.1
+
+# ============================================================================
+# NEW: CHAT INTERFACE DEPENDENCIES
+# ============================================================================
+
+# OCR Processing
+pytesseract==0.3.10
+Pillow==10.2.0
+opencv-python==4.8.1.78
+pdf2image==1.17.0
+# Note: Requires tesseract-ocr system package
+
+# Speech Recognition
+SpeechRecognition==3.10.1
+pydub==0.25.1
+# Note: Requires ffmpeg system package
+
+# WebSocket
+websockets==12.0
+
+# Data Processing
+numpy==1.26.3
+pandas==2.1.4
+
+# ============================================================================
+# SYSTEM DEPENDENCIES (Install separately)
+# ============================================================================
+# sudo apt-get install -y tesseract-ocr tesseract-ocr-ara
+# sudo apt-get install -y ffmpeg
+# sudo apt-get install -y poppler-utils  # for pdf2image

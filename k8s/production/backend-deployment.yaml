@@ -1,0 +1,167 @@
+# ============================================================================
+# HealthFlow Backend - Kubernetes Deployment
+# Production-ready with autoscaling and health checks
+# ============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: healthflow-backend
+  namespace: healthflow-prod
+  labels:
+    app: healthflow
+    component: backend
+    environment: production
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: healthflow
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: healthflow
+        component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: backend
+        image: healthflow/backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: healthflow-secrets
+              key: database-url
+        
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: healthflow-secrets
+              key: redis-url
+        
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: healthflow-secrets
+              key: jwt-secret
+        
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: healthflow-secrets
+              key: openai-api-key
+        
+        - name: HCX_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: healthflow-config
+              key: hcx-base-url
+        
+        - name: ENVIRONMENT
+          value: "production"
+        
+        - name: LOG_LEVEL
+          value: "INFO"
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: uploads
+          mountPath: /tmp/healthflow_uploads
+        - name: logs
+          mountPath: /var/log/healthflow
+      
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: healthflow-uploads-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: healthflow-logs-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: healthflow-backend-service
+  namespace: healthflow-prod
+  labels:
+    app: healthflow
+    component: backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: healthflow
+    component: backend
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: healthflow-backend-hpa
+  namespace: healthflow-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: healthflow-backend
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

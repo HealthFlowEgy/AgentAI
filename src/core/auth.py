@@ -364,3 +364,112 @@ def create_user(
     logger.info(f"User {username} created with role {role.value}")
     return user
 
+
+
+
+# FastAPI dependencies for authentication
+from fastapi import Depends, HTTPException, status, WebSocket
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+security = HTTPBearer()
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """
+    FastAPI dependency to get current authenticated user
+    """
+    from src.models.user import User as UserModel
+    
+    token = credentials.credentials
+    
+    try:
+        # Decode JWT token
+        payload = jwt.decode(
+            token,
+            security_config.jwt_secret,
+            algorithms=["HS256"]
+        )
+        
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+        
+        # Get user from database
+        result = await db_session.execute(
+            select(UserModel).where(UserModel.id == int(user_id))
+        )
+        user = result.scalar_one_or_none()
+        
+        if user is None or not user.active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found or inactive"
+            )
+        
+        return user
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired"
+        )
+    except jwt.JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+
+async def get_current_user_ws(
+    websocket: WebSocket,
+    token: str,
+    db_session: AsyncSession
+):
+    """
+    WebSocket authentication - get current user from token
+    """
+    from src.models.user import User as UserModel
+    
+    try:
+        # Decode JWT token
+        payload = jwt.decode(
+            token,
+            security_config.jwt_secret,
+            algorithms=["HS256"]
+        )
+        
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+        
+        # Get user from database
+        result = await db_session.execute(
+            select(UserModel).where(UserModel.id == int(user_id))
+        )
+        user = result.scalar_one_or_none()
+        
+        if user is None or not user.active:
+            return None
+        
+        return user
+        
+    except (jwt.ExpiredSignatureError, jwt.JWTError):
+        return None
+
+
+# Import get_db_session at the end to avoid circular imports
+try:
+    from src.services.database import get_db_session
+except ImportError:
+    # Define a placeholder if database module not available yet
+    async def get_db_session():
+        raise NotImplementedError("Database session not configured")
+

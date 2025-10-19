@@ -62,6 +62,28 @@ class CPTCode(Base):
     )
 
 
+class HCPCSCode(Base):
+    """HCPCS Codes (Healthcare Common Procedure Coding System)"""
+    __tablename__ = "hcpcs_codes"
+    
+    code = Column(String(10), primary_key=True)
+    description = Column(Text, nullable=False)
+    category = Column(String(100))
+    subcategory = Column(String(100))
+    
+    # Metadata
+    valid_from = Column(DateTime, default=datetime.utcnow)
+    valid_to = Column(DateTime, nullable=True)
+    active = Column(Boolean, default=True)
+    
+    # Search optimization
+    __table_args__ = (
+        Index('idx_hcpcs_description', 'description', postgresql_using='gin',
+              postgresql_ops={'description': 'gin_trgm_ops'}),
+        Index('idx_hcpcs_category', 'category'),
+    )
+
+
 class MedicalNecessityRule(Base):
     """Medical Necessity Rules - ICD-10 to CPT mapping"""
     __tablename__ = "medical_necessity_rules"
