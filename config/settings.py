@@ -60,6 +60,22 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = Field(default="gpt-4", env="OPENAI_MODEL")
     OPENAI_TEMPERATURE: float = Field(default=0.1, env="OPENAI_TEMPERATURE")
     OPENAI_MAX_TOKENS: int = Field(default=2000, env="OPENAI_MAX_TOKENS")
+
+    # DevOps Agent (Claude Agent SDK + GitHub + DigitalOcean)
+    # Optional at app startup; required only when the DevOps agent is invoked.
+    ANTHROPIC_API_KEY: Optional[str] = Field(default=None, description="Anthropic API key for Claude Agent SDK")
+    GITHUB_TOKEN: Optional[str] = Field(default=None, description="GitHub PAT (repo, workflow, admin:org if needed)")
+    DIGITALOCEAN_TOKEN: Optional[str] = Field(default=None, description="DigitalOcean API token")
+    DEVOPS_READ_ONLY_MODE: bool = Field(default=False, description="Force-disable all mutating DevOps tools")
+    DEVOPS_AGENT_MODEL: str = Field(default="claude-opus-4-7", description="Claude model for DevOps agent")
+    DEVOPS_MAX_TURNS: int = Field(default=20, description="Max agent turns per request")
+    DEVOPS_APPROVAL_TIMEOUT_S: int = Field(default=300, description="HITL approval timeout (seconds)")
+
+    # Optional Slack integration for DevOps agent
+    SLACK_BOT_TOKEN: Optional[str] = Field(default=None, description="Slack xoxb- bot token")
+    SLACK_SIGNING_SECRET: Optional[str] = Field(default=None, description="Slack request signing secret")
+    SLACK_APPROVAL_CHANNEL: Optional[str] = Field(default=None, description="Slack channel ID for approval cards")
+    DEVOPS_SLACK_APPROVERS: list = Field(default_factory=list, description="Slack user IDs allowed to approve mutations")
     
     # Retry Configuration
     MAX_RETRIES: int = Field(default=3, description="Max retry attempts")
